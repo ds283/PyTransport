@@ -35,6 +35,8 @@
 # include <iomanip>
 # include <cmath>
 
+#include <array>
+
 using namespace std;
 
 // The line below is updated evey time the moduleSetup file is run.
@@ -588,13 +590,47 @@ static PyObject* MT_alphaEvolve(PyObject* self,  PyObject *args)
     double * alpOutC;
     alpOut = (PyArrayObject*) PyArray_SimpleNew(2,dims,NPY_DOUBLE);
     alpOutC = (double *) PyArray_DATA(alpOut);
-    
-    
+
+    std::ofstream f_u2;
+    std::ofstream f_u3;
+
+    f_u2.open("u2_data.csv", std::ios::out | std::ios::trunc);
+    f_u3.open("u3_data.csv", std::ios::out | std::ios::trunc);
+
+    std::array<std::string, 4> coords = { std::string("chi"), std::string("psi"), std::string("dchi"), std::string("dpsi") };
+
+    f_u2 << "\"N\"";
+    for(unsigned int i = 0; i < coords.size(); ++i)
+        {
+            for(unsigned int j = 0; j < coords.size(); ++j)
+                {
+                    f_u2 << ",";
+                    f_u2 << "\"" << coords[i] << "," << coords[j] << "\"";
+                }
+        }
+    f_u2 << "\n";
+
+    f_u3 << "\"N\"";
+    for(unsigned int i = 0; i < coords.size(); ++i)
+        {
+            for(unsigned int j = 0; j < coords.size(); ++j)
+                {
+                    for(unsigned int k = 0; k < coords.size(); ++k)
+                        {
+                            f_u3 << ",";
+                            f_u3 << "\"" << coords[i] << "," << coords[j] << "," << coords[k] << "\"";
+                        }
+                }
+        }
+    f_u3 << "\n";
+
     evolveAlp(N, y, yp, paramsIn2);
     int flag=-1;
     
     // run alpha *******************************************
     vector<double> fieldIn(2*nF);
+    std::vector<double> u2;
+    std::vector<double> u3;
     
     for(int ii=0; ii<nt; ii++ ){
         while (N<(tc[ii]-log(kscale))){
@@ -602,7 +638,35 @@ static PyObject* MT_alphaEvolve(PyObject* self,  PyObject *args)
             if (flag== 50){cout<< "\n \n \n Integrator failed at time N = " <<N <<" \n \n \n"; return Py_BuildValue("d", N);}
             flag=-2;
         }
+
         fieldIn = vector<double>(y,y+2*nF);
+
+        u2 = mm.u(fieldIn, Vparams, k1n, N);
+        u3 = mm.u(fieldIn, Vparams, k1n, k2n, k3n, N);
+
+        f_u2 << N;
+        for(unsigned int i = 0; i < coords.size(); ++i)
+            {
+                for(unsigned int j = 0; j < coords.size(); ++j)
+                    {
+                        f_u2 << "," << std::abs(u2[i + 2*nF*j]);
+                    }
+            }
+        f_u2 << "\n";
+
+        f_u3 << N;
+        for(unsigned int i = 0; i < coords.size(); ++i)
+            {
+                for(unsigned int j = 0; j < coords.size(); ++j)
+                    {
+                        for(unsigned int k = 0; k < coords.size(); ++k)
+                            {
+                                f_u3 << "," << std::abs(u3[i + 2*nF*j + 2*nF*2*nF*k]);
+                            }
+                    }
+            }
+        f_u3 << "\n";
+
         Ni=mm.N1(fieldIn,Vparams,N); // calculate N,i array
         Nii1=mm.N2(fieldIn,Vparams,k1n,k2n,k3n,N); // claculate N,ij array for first arrangement of ks
         Nii2=mm.N2(fieldIn,Vparams,k2n,k1n,k3n,N); // for second
@@ -645,7 +709,10 @@ static PyObject* MT_alphaEvolve(PyObject* self,  PyObject *args)
         }
         
     }
-    
+
+    f_u2.close();
+    f_u3.close();
+
     delete [] y;  delete [] paramsIn2; delete [] yp;
     
     return PyArray_Return(alpOut);
